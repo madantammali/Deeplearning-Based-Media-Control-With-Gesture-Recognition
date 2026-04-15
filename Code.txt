@@ -1,0 +1,105 @@
+import os
+import cv2
+import mediapipe as mp
+import pyautogui
+import numpy as np
+# Suppress TensorFlow logs
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# Initialize MediaPipe Hands
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=1,
+    min_detection_confidence=0.8,
+    min_tracking_confidence=0.8
+)
+mp_drawing = mp.solutions.drawing_utils
+
+# Webcam setup
+cap = cv2.VideoCapture(0)
+# Function to calculate Euclidean distance
+def calculate_distance(point1, point2):
+    return np.sqrt((point1.x - point2.x)*2 + (point1.y - point2.y)*2)
+# Function to detect gestures
+def detect_gesture(hand_landmarks):
+    thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+    thumb_mcp = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_MCP]
+
+    index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+    index_dip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_DIP]
+
+    middle_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+    middle_dip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_DIP]
+
+    ring_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+    ring_dip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_DIP]
+
+    pinky_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+    pinky_dip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_DIP
+# Check finger states
+   thumb_open = thumb_tip.y < thumb_mcp.y
+    index_open = index_tip.y < index_dip.y
+    middle_open = middle_tip.y < middle_dip.y
+    ring_open = ring_tip.y < ring_dip.y
+    pinky_open = pinky_tip.y < pinky_dip.y
+
+    fingers_open = [thumb_open, index_open, middle_open, ring_open, pinky_open]
+# Gesture detection
+if all(fingers_open):
+        return "stop"       # All fingers open
+    elif not any(fingers_open):
+        return "play"       # Fist closed
+    elif pinky_open and not any(fingers_open[:-1]):
+        return "previous"   # Only pinky open
+    elif thumb_open and not any(fingers_open[1:]):
+        return "next"       # Only thumb open
+    return None
+# Main loop for hand gestures
+previous_distance = 0
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    frame = cv2.flip(frame, 1)
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = hands.process(rgb_frame)
+
+    if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
+            mp_drawing.draw_landmarks(frame,hand_landmarks, mp_hands.HAND_CONNECTIONS)
+	   # Detect gesture
+	   gesture = detect_gesture(hand_landmarks)
+            	   if gesture == "stop":
+                	print("Stopping media")
+                	pyautogui.press('playpause')
+            	   elif gesture == "play":
+                	print("Playing media")
+                	pyautogui.press('playpause')
+            	   elif gesture == "next":
+                	print("Playing next track")
+                	pyautogui.press('nexttrack')
+            	   elif gesture == "previous":
+                	print("Playing previous track")
+                	pyautogui.press('prevtrack')
+# Volume control using thumb-index distance
+thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+            index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+            current_distance = calculate_distance(thumb_tip, index_tip)
+
+            if current_distance > previous_distance + 0.01:
+                print("Increasing volume")
+                pyautogui.press('volumeup')
+            elif current_distance < previous_distance - 0.01:
+                print("Decreasing volume")
+                pyautogui.press('volumedown')
+
+            previous_distance = current_distance
+
+    cv2.imshow("Gesture Media Control", frame)
+# Press 'q' to quit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
